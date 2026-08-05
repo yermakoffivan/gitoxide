@@ -743,3 +743,40 @@ fn erased_into_inner_preserves_source_chain() {
         "type erasure remains transparent to std-style source traversal"
     );
 }
+
+#[test]
+fn copied_sources_retain_the_rest_of_the_source_chain() {
+    let e = Exn::new(ErrorWithSource("top", ErrorWithSource("middle", message("bottom"))));
+    let middle = e
+        .frame()
+        .children()
+        .first()
+        .expect("the copied source is present")
+        .error();
+
+    assert_eq!(
+        middle
+            .source()
+            .expect("the copied source retains its source")
+            .to_string(),
+        "bottom"
+    );
+}
+
+#[test]
+fn into_boxed_std_error() {
+    let err: Box<dyn std::error::Error + Send + Sync> = message("failure").raise().into();
+    let err = err
+        .downcast_ref::<gix_error::Error>()
+        .expect("conversion retains the gix error boundary type");
+    assert_eq!(err.probable_cause().to_string(), "failure");
+}
+
+#[test]
+fn erased_validation_error_remains_classified() {
+    let err = gix_error::ValidationError::new("invalid").raise_erased().into_error();
+    assert!(
+        err.is_validation(),
+        "the tree-backed Error classifies the original ValidationError exposed by Frame::error() after type erasure"
+    );
+}

@@ -36,17 +36,21 @@ impl<E: Error + Send + Sync + 'static> Exn<E> {
     ///
     /// See also [`ErrorExt::raise`](crate::ErrorExt) for a fluent way to convert an error into an `Exn` instance.
     ///
-    /// Note that **sources of `error` are degenerated to their string representation** and all type information is erased.
+    /// Note that **sources of `error` are degenerated to their string representation** and all type information is erased,
+    /// unless `error` is already a [`crate::Error`], whose stored errors remain intact.
     ///
     /// [source chain of the error]: Error::source
     #[track_caller]
     pub fn new(error: E) -> Self {
-        fn walk_sources(error: &dyn Error, location: &'static Location<'static>) -> Vec<Frame> {
-            if let Some(source) = error.source() {
+        fn walk_sources(
+            source: Option<std::sync::Arc<SourceError>>,
+            location: &'static Location<'static>,
+        ) -> Vec<Frame> {
+            if let Some(source) = source {
                 let children = vec![Frame {
-                    error: Box::new(SourceError::new(source)),
+                    error: Box::new((*source).clone()),
                     location,
-                    children: walk_sources(source, location),
+                    children: walk_sources(source.source.clone(), location),
                 }];
                 children
             } else {
@@ -55,7 +59,12 @@ impl<E: Error + Send + Sync + 'static> Exn<E> {
         }
 
         let location = Location::caller();
-        let children = walk_sources(&error, location);
+        let source = if (&error as &(dyn Error + 'static)).is::<crate::Error>() {
+            None
+        } else {
+            error.source().map(SourceError::new).map(std::sync::Arc::new)
+        };
+        let children = walk_sources(source, location);
         let frame = Frame {
             error: Box::new(error),
             location,
@@ -257,6 +266,12 @@ fn write_frame_recursive(
         write_location(f, frame.location)?;
     }
 
+    if let Some(err) = frame.error().downcast_ref::<crate::Error>() {
+        for source in err.sources().filter(|source| !source.is::<crate::Error>()).skip(1) {
+            write!(f, "\n{prefix}|\n{prefix}└─ {source}")?;
+        }
+    }
+
     let children = frame.children();
     let children_len = children.len();
 
@@ -264,7 +279,15 @@ fn write_frame_recursive(
         write!(f, "\n{prefix}|")?;
         write!(f, "\n{prefix}└─ ")?;
 
-        let child_child_len = child.children().len();
+        let child_child_len = if child
+            .error()
+            .downcast_ref::<crate::Error>()
+            .is_some_and(|err| err.sources().filter(|source| !source.is::<crate::Error>()).count() > 1)
+        {
+            1
+        } else {
+            child.children().len()
+        };
         let may_linearize_chain = matches!(tree_mode, TreeMode::Linearize) && children_len == 1 && child_child_len == 1;
         if may_linearize_chain {
             write_frame_recursive(f, child, prefix, err_mode, tree_mode)?;
@@ -311,10 +334,11 @@ impl Frame {
     /// If the error was [erased](crate::Exn::erased), this is the original error,
     /// so it can still be downcast to its actual type.
     pub fn error(&self) -> &(dyn Error + Send + Sync + 'static) {
-        match self.error.downcast_ref::<Untyped>() {
-            Some(erased) => &*erased.0,
-            None => &*self.error,
+        let mut error = &*self.error;
+        while let Some(erased) = error.downcast_ref::<Untyped>() {
+            error = &*erased.0;
         }
+        error
     }
 
     /// Return the source code location where this exception frame was created.
@@ -419,6 +443,15 @@ where
     }
 }
 
+impl<E> From<Exn<E>> for Box<dyn Error + Send + Sync + 'static>
+where
+    E: Error + Send + Sync + 'static,
+{
+    fn from(err: Exn<E>) -> Self {
+        Box::new(err.into_error())
+    }
+}
+
 #[cfg(feature = "anyhow")]
 impl<E> From<Exn<E>> for anyhow::Error
 where
@@ -488,11 +521,13 @@ impl fmt::Debug for Something {
 impl Error for Something {}
 
 /// A way to keep all information of errors returned by `source()` chains.
+#[derive(Clone)]
 struct SourceError {
     display: String,
     alt_display: String,
     debug: String,
     alt_debug: String,
+    source: Option<std::sync::Arc<SourceError>>,
 }
 
 impl fmt::Debug for SourceError {
@@ -513,7 +548,11 @@ impl fmt::Display for SourceError {
     }
 }
 
-impl Error for SourceError {}
+impl Error for SourceError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source.as_deref().map(|source| source as &dyn Error)
+    }
+}
 
 impl SourceError {
     fn new(err: &dyn Error) -> Self {
@@ -522,6 +561,7 @@ impl SourceError {
             alt_display: format!("{err:#}"),
             debug: format!("{err:?}"),
             alt_debug: format!("{err:#?}"),
+            source: err.source().map(SourceError::new).map(std::sync::Arc::new),
         }
     }
 }
@@ -530,24 +570,54 @@ impl<E> From<Exn<E>> for ChainedError
 where
     E: std::error::Error + Send + Sync + 'static,
 {
-    fn from(mut err: Exn<E>) -> Self {
-        let stack: VecDeque<_> = err.frame.children.drain(..).collect();
-        let location = err.frame.location;
-        ChainedError {
-            err: err.into_box(),
+    fn from(err: Exn<E>) -> Self {
+        let probable_cause = err.frame.probable_cause().and_then(|cause| {
+            err.frame
+                .iter_frames()
+                .position(|frame| std::ptr::addr_eq(frame, cause))
+        });
+        let Frame {
+            error,
             location,
-            source: recurse_source_frames(stack),
+            children,
+        } = *err.frame;
+        let stack = children.into_iter().collect();
+        ChainedError {
+            err: unerase(error),
+            location,
+            is_probable_cause: probable_cause.is_none(),
+            source: recurse_source_frames(stack, probable_cause, 1),
         }
     }
 }
 
-fn recurse_source_frames(mut stack: VecDeque<Frame>) -> Option<Box<ChainedError>> {
+/// Remove all type-erasure markers before storing an error in a [`ChainedError`].
+///
+/// [`Untyped::source()`] deliberately forwards to the wrapped error's source to keep
+/// the marker transparent. Storing the marker itself in the chain would therefore
+/// hide a wrapped leaf error from source traversal and classification. Unwrapping it
+/// here retains the original runtime type without changing those source semantics.
+fn unerase(mut error: Box<dyn Error + Send + Sync + 'static>) -> Box<dyn Error + Send + Sync + 'static> {
+    loop {
+        match error.downcast::<Untyped>() {
+            Ok(untyped) => error = untyped.0,
+            Err(typed) => return typed,
+        }
+    }
+}
+
+fn recurse_source_frames(
+    mut stack: VecDeque<Frame>,
+    probable_cause: Option<usize>,
+    index: usize,
+) -> Option<Box<ChainedError>> {
     let frame = stack.pop_front()?;
     stack.extend(frame.children);
     Box::new(ChainedError {
-        err: frame.error,
+        err: unerase(frame.error),
         location: frame.location,
-        source: recurse_source_frames(stack),
+        is_probable_cause: probable_cause == Some(index),
+        source: recurse_source_frames(stack, probable_cause, index + 1),
     })
     .into()
 }
