@@ -2077,7 +2077,6 @@ dependencies = [
  "gix-tempfile",
  "gix-utils",
  "tempfile",
- "thiserror 2.0.18",
 ]
 
 [[package]]
