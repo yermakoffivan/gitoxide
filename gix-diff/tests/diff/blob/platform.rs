@@ -22,24 +22,28 @@ fn resources_of_worktree_and_odb_and_check_link() -> crate::Result {
         }),
         gix_diff::blob::pipeline::Mode::default(),
     );
-    platform.set_resource(
-        gix_hash::Kind::Sha1.null(),
-        EntryKind::Blob,
-        "a".into(),
-        ResourceKind::OldOrSource,
-        &gix_object::find::Never,
-    )?;
+    platform
+        .set_resource(
+            gix_hash::Kind::Sha1.null(),
+            EntryKind::Blob,
+            "a".into(),
+            ResourceKind::OldOrSource,
+            &gix_object::find::Never,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
     let db = object_db();
     let a_content = "a-content";
     let id = insert(&db, a_content)?;
-    platform.set_resource(
-        id,
-        EntryKind::BlobExecutable,
-        "a".into(),
-        ResourceKind::NewOrDestination,
-        &db,
-    )?;
+    platform
+        .set_resource(
+            id,
+            EntryKind::BlobExecutable,
+            "a".into(),
+            ResourceKind::NewOrDestination,
+            &db,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
     let (old, new) = platform.resources().expect("previously set source and destination");
     assert_eq!(old.data.as_slice().expect("present").as_bstr(), "a\n");
@@ -87,7 +91,9 @@ fn resources_of_worktree_and_odb_and_check_link() -> crate::Result {
         "in this case, there is no rename-to field as last argument, it's based on the resource paths being different"
     );
 
-    let command = platform.prepare_diff_command("test --flag".into(), Default::default(), 0, 1)?;
+    let command = platform
+        .prepare_diff_command("test --flag".into(), Default::default(), 0, 1)
+        .map_err(gix_error::Exn::into_error)?;
     assert!(
         command
             .get_args()
@@ -95,10 +101,14 @@ fn resources_of_worktree_and_odb_and_check_link() -> crate::Result {
         "configured command lines with arguments are interpreted by a shell"
     );
 
-    platform.set_resource(id, EntryKind::Link, "a".into(), ResourceKind::NewOrDestination, &db)?;
+    platform
+        .set_resource(id, EntryKind::Link, "a".into(), ResourceKind::NewOrDestination, &db)
+        .map_err(gix_error::Exn::into_error)?;
 
     // Double-inserts are fine.
-    platform.set_resource(id, EntryKind::Link, "a".into(), ResourceKind::NewOrDestination, &db)?;
+    platform
+        .set_resource(id, EntryKind::Link, "a".into(), ResourceKind::NewOrDestination, &db)
+        .map_err(gix_error::Exn::into_error)?;
     let (old, new) = platform.resources().expect("previously set source and destination");
     assert_eq!(
         old.data.as_slice().expect("present").as_bstr(),
@@ -212,18 +222,22 @@ fn diff_binary() -> crate::Result {
         }),
         gix_diff::blob::pipeline::Mode::default(),
     );
-    platform.set_resource(
-        gix_hash::Kind::Sha1.null(),
-        EntryKind::Blob,
-        "a".into(),
-        ResourceKind::OldOrSource,
-        &gix_object::find::Never,
-    )?;
+    platform
+        .set_resource(
+            gix_hash::Kind::Sha1.null(),
+            EntryKind::Blob,
+            "a".into(),
+            ResourceKind::OldOrSource,
+            &gix_object::find::Never,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
     let db = object_db();
     let a_content = "b";
     let id = insert(&db, a_content)?;
-    platform.set_resource(id, EntryKind::Blob, "b".into(), ResourceKind::NewOrDestination, &db)?;
+    platform
+        .set_resource(id, EntryKind::Blob, "b".into(), ResourceKind::NewOrDestination, &db)
+        .map_err(gix_error::Exn::into_error)?;
 
     let out = platform.prepare_diff()?;
     assert!(
@@ -253,18 +267,22 @@ fn diff_performed_despite_external_command() -> crate::Result {
         }),
         gix_diff::blob::pipeline::Mode::default(),
     );
-    platform.set_resource(
-        gix_hash::Kind::Sha1.null(),
-        EntryKind::Blob,
-        "a".into(),
-        ResourceKind::OldOrSource,
-        &gix_object::find::Never,
-    )?;
+    platform
+        .set_resource(
+            gix_hash::Kind::Sha1.null(),
+            EntryKind::Blob,
+            "a".into(),
+            ResourceKind::OldOrSource,
+            &gix_object::find::Never,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
     let db = object_db();
     let a_content = "b";
     let id = insert(&db, a_content)?;
-    platform.set_resource(id, EntryKind::Blob, "b".into(), ResourceKind::NewOrDestination, &db)?;
+    platform
+        .set_resource(id, EntryKind::Blob, "b".into(), ResourceKind::NewOrDestination, &db)
+        .map_err(gix_error::Exn::into_error)?;
 
     let out = platform.prepare_diff()?;
     assert!(
@@ -295,18 +313,22 @@ fn diff_skipped_due_to_external_command_and_enabled_option() -> crate::Result {
     );
     platform.options.skip_internal_diff_if_external_is_configured = true;
 
-    platform.set_resource(
-        gix_hash::Kind::Sha1.null(),
-        EntryKind::Blob,
-        "a".into(),
-        ResourceKind::OldOrSource,
-        &gix_object::find::Never,
-    )?;
+    platform
+        .set_resource(
+            gix_hash::Kind::Sha1.null(),
+            EntryKind::Blob,
+            "a".into(),
+            ResourceKind::OldOrSource,
+            &gix_object::find::Never,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
     let db = object_db();
     let a_content = "b";
     let id = insert(&db, a_content)?;
-    platform.set_resource(id, EntryKind::Blob, "b".into(), ResourceKind::NewOrDestination, &db)?;
+    platform
+        .set_resource(id, EntryKind::Blob, "b".into(), ResourceKind::NewOrDestination, &db)
+        .map_err(gix_error::Exn::into_error)?;
 
     let out = platform.prepare_diff()?;
     assert_eq!(
@@ -322,21 +344,25 @@ fn diff_skipped_due_to_external_command_and_enabled_option() -> crate::Result {
 #[test]
 fn source_and_destination_do_not_exist() -> crate::Result {
     let mut platform = new_platform(None, pipeline::Mode::default());
-    platform.set_resource(
-        gix_hash::Kind::Sha1.null(),
-        EntryKind::Blob,
-        "missing".into(),
-        ResourceKind::OldOrSource,
-        &gix_object::find::Never,
-    )?;
+    platform
+        .set_resource(
+            gix_hash::Kind::Sha1.null(),
+            EntryKind::Blob,
+            "missing".into(),
+            ResourceKind::OldOrSource,
+            &gix_object::find::Never,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
-    platform.set_resource(
-        gix_hash::Kind::Sha1.null(),
-        EntryKind::BlobExecutable,
-        "a".into(),
-        ResourceKind::NewOrDestination,
-        &gix_object::find::Never,
-    )?;
+    platform
+        .set_resource(
+            gix_hash::Kind::Sha1.null(),
+            EntryKind::BlobExecutable,
+            "a".into(),
+            ResourceKind::NewOrDestination,
+            &gix_object::find::Never,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
     let (old, new) = platform.resources().expect("previously set source and destination");
     assert_eq!(old.data, platform::resource::Data::Missing);

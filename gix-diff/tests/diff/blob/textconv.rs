@@ -35,20 +35,24 @@ fn binary_diff_with_textconv() -> gix_testtools::Result {
         attributes,
     );
 
-    resource_cache.set_resource(
-        new_file_id,
-        gix_object::tree::EntryKind::Blob,
-        "sample.bin".into(),
-        ResourceKind::OldOrSource,
-        &odb,
-    )?;
-    resource_cache.set_resource(
-        changed_file_id,
-        gix_object::tree::EntryKind::Blob,
-        "sample.bin".into(),
-        ResourceKind::NewOrDestination,
-        &odb,
-    )?;
+    resource_cache
+        .set_resource(
+            new_file_id,
+            gix_object::tree::EntryKind::Blob,
+            "sample.bin".into(),
+            ResourceKind::OldOrSource,
+            &odb,
+        )
+        .map_err(gix_error::Exn::into_error)?;
+    resource_cache
+        .set_resource(
+            changed_file_id,
+            gix_object::tree::EntryKind::Blob,
+            "sample.bin".into(),
+            ResourceKind::NewOrDestination,
+            &odb,
+        )
+        .map_err(gix_error::Exn::into_error)?;
 
     let out = resource_cache.prepare_diff()?;
     let input = out.interned_input();

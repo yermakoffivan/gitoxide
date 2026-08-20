@@ -16,7 +16,7 @@ pub enum Error {
     HashFile(gix_hash::io::Error),
     ReadLink(std::io::Error),
     ConvertToGit(gix_filter::pipeline::convert::to_git::Error),
-    RewriteTracker(gix_diff::rewrites::tracker::emit::Error),
+    RewriteTracker(std::io::Error),
 }
 
 impl std::fmt::Display for Error {
@@ -65,7 +65,7 @@ impl From<gix_filter::pipeline::convert::to_git::Error> for Error {
 
 impl From<gix_diff::rewrites::tracker::emit::Error> for Error {
     fn from(err: gix_diff::rewrites::tracker::emit::Error) -> Self {
-        Error::RewriteTracker(err)
+        Error::RewriteTracker(std::io::Error::other(err.into_error()))
     }
 }
 
