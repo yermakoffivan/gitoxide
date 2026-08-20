@@ -2730,7 +2730,6 @@ version = "0.1.0"
 dependencies = [
  "bstr",
  "serde",
- "thiserror 2.0.18",
  "zlib-rs",
 ]
 
