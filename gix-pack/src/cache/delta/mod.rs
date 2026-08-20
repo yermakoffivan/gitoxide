@@ -1,10 +1,7 @@
 /// Returned when using various methods on a [`Tree`]
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug)]
 #[allow(missing_docs)]
 pub enum Error {
-    #[error(
-        "Pack offsets must only increment. The previous pack offset was {last_pack_offset}, the current one is {pack_offset}"
-    )]
     InvariantIncreasingPackOffset {
         /// The last seen pack offset
         last_pack_offset: crate::data::Offset,
@@ -36,6 +33,22 @@ pub struct Tree<T> {
     /// Child indices waiting for an in-pack object with the given id to be resolved.
     ref_child_indices: tree::RefDeltaChildren,
 }
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::InvariantIncreasingPackOffset {
+                last_pack_offset,
+                pack_offset,
+            } => write!(
+                f,
+                "Pack offsets must only increment. The previous pack offset was {last_pack_offset}, the current one is {pack_offset}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 ///
 pub mod traverse;
