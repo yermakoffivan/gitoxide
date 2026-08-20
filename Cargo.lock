@@ -1748,6 +1748,7 @@ dependencies = [
  "document-features",
  "gix-config",
  "gix-config-value",
+ "gix-error",
  "gix-features",
  "gix-glob",
  "gix-path",
@@ -1759,7 +1760,6 @@ dependencies = [
  "serde",
  "serial_test",
  "smallvec",
- "thiserror 2.0.18",
  "unicode-bom",
 ]
 
