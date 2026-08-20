@@ -1860,7 +1860,6 @@ dependencies = [
  "gix-utils",
  "gix-worktree",
  "pretty_assertions",
- "thiserror 2.0.18",
 ]
 
 [[package]]
