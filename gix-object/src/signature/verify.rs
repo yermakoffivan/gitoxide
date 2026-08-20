@@ -161,24 +161,56 @@ impl Outcome {
 }
 
 /// The error returned when verifying an object signature.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 #[expect(missing_docs)]
 pub enum Error {
-    #[error("The signature format is unsupported")]
     UnsupportedFormat,
-    #[error("The configured program format {program_format:?} does not match signature format {signature_format:?}")]
     FormatMismatch {
         program_format: Format,
         signature_format: Format,
     },
-    #[error("Could not create or write the temporary signature file")]
-    TemporaryFile(#[source] std::io::Error),
-    #[error("Could not execute signature verifier {program:?}")]
-    Spawn { program: OsString, source: std::io::Error },
-    #[error("Could not communicate with signature verifier {program:?}")]
-    Communicate { program: OsString, source: std::io::Error },
-    #[error("Signature time could not be formatted for SSH verification")]
-    CommitTime(#[source] Box<dyn std::error::Error + Send + Sync>),
+    TemporaryFile(std::io::Error),
+    Spawn {
+        program: OsString,
+        source: std::io::Error,
+    },
+    Communicate {
+        program: OsString,
+        source: std::io::Error,
+    },
+    CommitTime(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::UnsupportedFormat => f.write_str("The signature format is unsupported"),
+            Error::FormatMismatch {
+                program_format,
+                signature_format,
+            } => write!(
+                f,
+                "The configured program format {program_format:?} does not match signature format {signature_format:?}"
+            ),
+            Error::TemporaryFile(_) => f.write_str("Could not create or write the temporary signature file"),
+            Error::Spawn { program, .. } => write!(f, "Could not execute signature verifier {program:?}"),
+            Error::Communicate { program, .. } => {
+                write!(f, "Could not communicate with signature verifier {program:?}")
+            }
+            Error::CommitTime(_) => f.write_str("Signature time could not be formatted for SSH verification"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::TemporaryFile(source) => Some(source),
+            Error::Spawn { source, .. } | Error::Communicate { source, .. } => Some(source),
+            Error::CommitTime(source) => Some(source.as_ref()),
+            Error::UnsupportedFormat | Error::FormatMismatch { .. } => None,
+        }
+    }
 }
 
 impl SignedData<'_> {

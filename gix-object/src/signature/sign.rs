@@ -29,35 +29,60 @@ pub struct Options {
 }
 
 /// The error returned when signing an object.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 #[expect(missing_docs)]
 pub enum Error {
-    #[error(transparent)]
-    Decode(#[from] crate::decode::Error),
-    #[error(transparent)]
-    Encode(#[from] std::io::Error),
-    #[error("A signing key is required")]
+    Decode(crate::decode::Error),
+    Encode(std::io::Error),
     MissingSigningKey,
-    #[error("Could not create or write a temporary signing file")]
-    TemporaryFile(#[source] std::io::Error),
-    #[error("Could not execute signing program {program:?}")]
-    Spawn {
-        program: OsString,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("Could not communicate with signing program {program:?}")]
-    Communicate {
-        program: OsString,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("Signing program {program:?} failed: {output}")]
+    TemporaryFile(std::io::Error),
+    Spawn { program: OsString, source: std::io::Error },
+    Communicate { program: OsString, source: std::io::Error },
     Failed { program: OsString, output: BString },
-    #[error("The OpenPGP/X.509 signer did not report SIG_CREATED")]
     MissingSignatureConfirmation,
-    #[error("The SSH signer produced no signature")]
-    MissingSshSignature(#[source] std::io::Error),
+    MissingSshSignature(std::io::Error),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Decode(err) => std::fmt::Display::fmt(err, f),
+            Error::Encode(err) => std::fmt::Display::fmt(err, f),
+            Error::MissingSigningKey => f.write_str("A signing key is required"),
+            Error::TemporaryFile(_) => f.write_str("Could not create or write a temporary signing file"),
+            Error::Spawn { program, .. } => write!(f, "Could not execute signing program {program:?}"),
+            Error::Communicate { program, .. } => {
+                write!(f, "Could not communicate with signing program {program:?}")
+            }
+            Error::Failed { program, output } => write!(f, "Signing program {program:?} failed: {output}"),
+            Error::MissingSignatureConfirmation => f.write_str("The OpenPGP/X.509 signer did not report SIG_CREATED"),
+            Error::MissingSshSignature(_) => f.write_str("The SSH signer produced no signature"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Decode(err) => err.source(),
+            Error::Encode(err) => err.source(),
+            Error::TemporaryFile(err) | Error::MissingSshSignature(err) => Some(err),
+            Error::Spawn { source, .. } | Error::Communicate { source, .. } => Some(source),
+            Error::MissingSigningKey | Error::Failed { .. } | Error::MissingSignatureConfirmation => None,
+        }
+    }
+}
+
+impl From<crate::decode::Error> for Error {
+    fn from(err: crate::decode::Error) -> Self {
+        Error::Decode(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::Encode(err)
+    }
 }
 
 impl CommitRef<'_> {
