@@ -117,7 +117,9 @@ fn run_baseline() -> crate::Result {
             }
         }
 
-        let mut actual_index = gix_index::State::from_tree(&actual_id, &odb, Default::default())?;
+        #[allow(clippy::redundant_closure_for_method_calls)]
+        let mut actual_index =
+            gix_index::State::from_tree(&actual_id, &odb, Default::default()).map_err(|err| err.into_error())?;
         let expected_index = {
             let deviating_index_path = root.join(".git").join(format!("{case_name}.index"));
             if deviating_index_path.exists() {

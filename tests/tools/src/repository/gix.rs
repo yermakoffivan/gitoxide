@@ -323,7 +323,8 @@ fn index(git_dir: &Path, hash: Kind, objects: &gix_odb::Handle) -> Result<Vec<In
                 entry.id.as_ref(),
                 objects,
                 gix_index::validate::path::component::Options::default(),
-            )?;
+            )
+            .map_err(|err| err.into_error())?;
             for entry in expanded.entries() {
                 let mut path = BString::from(prefix);
                 if !path.is_empty() {
