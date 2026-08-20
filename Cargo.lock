@@ -2301,7 +2301,6 @@ dependencies = [
  "parking_lot",
  "rustix",
  "serial_test",
- "thiserror 2.0.18",
 ]
 
 [[package]]
