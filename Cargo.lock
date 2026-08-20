@@ -2631,13 +2631,13 @@ dependencies = [
  "assert_matches",
  "bstr",
  "document-features",
+ "gix-error",
  "gix-path",
  "gix-testtools",
  "gix-utils",
  "percent-encoding",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
 ]
 
 [[package]]
