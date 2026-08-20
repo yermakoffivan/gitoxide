@@ -168,7 +168,8 @@ fn records_status_quo_sha1() -> crate::Result {
                 &objects,
                 &mut |id| id.to_hex_with_len(7).to_string(),
                 options.clone(),
-            )?
+            )
+            .map_err(gix_error::Exn::into_error)?
             .tree_merge;
             assert_no_unknown_conflicts(&outcome, &format!("{ours_label} + {theirs_label}"));
             let conflicted = outcome.has_unresolved_conflicts(git_kind);
@@ -944,7 +945,8 @@ fn records_submodule_status_quo_sha1() -> crate::Result {
                     &objects,
                     &mut |id| id.to_hex_with_len(7).to_string(),
                     options.clone(),
-                )?
+                )
+                .map_err(gix_error::Exn::into_error)?
                 .tree_merge;
                 let context = format!("{ours_label} + {theirs_label} ({policy})");
                 assert_no_unknown_conflicts(&outcome, &context);

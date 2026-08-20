@@ -87,7 +87,8 @@ fn run_baseline() -> crate::Result {
             &odb,
             &mut |id| id.to_hex_with_len(7).to_string(),
             options.clone(),
-        )?
+        )
+        .map_err(gix_error::Exn::into_error)?
         .tree_merge;
         assert_no_unknown_conflicts(&actual, &case_name);
 
@@ -119,7 +120,7 @@ fn run_baseline() -> crate::Result {
 
         #[allow(clippy::redundant_closure_for_method_calls)]
         let mut actual_index =
-            gix_index::State::from_tree(&actual_id, &odb, Default::default()).map_err(|err| err.into_error())?;
+            gix_index::State::from_tree(&actual_id, &odb, Default::default()).map_err(gix_error::Exn::into_error)?;
         let expected_index = {
             let deviating_index_path = root.join(".git").join(format!("{case_name}.index"));
             if deviating_index_path.exists() {
@@ -197,7 +198,8 @@ fn run_baseline() -> crate::Result {
                 &odb,
                 &mut |id| id.to_hex_with_len(7).to_string(),
                 options.clone(),
-            )?
+            )
+            .map_err(gix_error::Exn::into_error)?
             .tree_merge;
             assert_no_unknown_conflicts(&actual, &basename);
 

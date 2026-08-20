@@ -4,8 +4,9 @@
 
 use std::borrow::Cow;
 
-use bstr::{BString, ByteSlice};
+use bstr::{BStr, BString, ByteSlice};
 use gix_diff::tree_with_rewrites::Change;
+use gix_error::ResultExt;
 use gix_hash::ObjectId;
 use gix_object::{
     FindExt, tree,
@@ -23,6 +24,46 @@ use crate::tree::{
 };
 
 use super::change::{MatchKind, collect as collect_changes, matching as matching_change, pair as pair_candidate};
+
+struct Editor<'a>(tree::Editor<'a>);
+
+impl<'a> std::ops::Deref for Editor<'a> {
+    type Target = tree::Editor<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Editor<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Editor<'_> {
+    fn remove<I, C>(&mut self, path: I) -> Result<&mut Self, Error>
+    where
+        I: IntoIterator<Item = C>,
+        C: AsRef<BStr>,
+    {
+        self.0
+            .remove(path)
+            .or_raise(|| gix_error::message("Tree merge failed"))?;
+        Ok(self)
+    }
+
+    fn upsert<I, C>(&mut self, path: I, kind: EntryKind, id: ObjectId) -> Result<&mut Self, Error>
+    where
+        I: IntoIterator<Item = C>,
+        C: AsRef<BStr>,
+    {
+        self.0
+            .upsert(path, kind, id)
+            .or_raise(|| gix_error::message("Tree merge failed"))?;
+        Ok(self)
+    }
+}
 
 /// Perform a merge between `our_tree` and `their_tree`, using `base_tree` as merge-base.
 /// Note that `base_tree` can be an empty tree to indicate 'no common ancestor between the two sides'.
@@ -104,10 +145,12 @@ where
 {
     let _span = gix_trace::coarse!("gix_merge::tree", ?base_tree, ?our_tree, ?their_tree, ?labels);
     let (mut base_buf, mut side_buf) = (Vec::new(), Vec::new());
-    let mut editor = {
-        let ancestor_tree = objects.find_tree(base_tree, &mut base_buf)?;
+    let mut editor = Editor({
+        let ancestor_tree = objects
+            .find_tree(base_tree, &mut base_buf)
+            .or_raise(|| gix_error::message("Tree merge failed"))?;
         tree::Editor::new(ancestor_tree.to_owned(), objects, base_tree.kind())
-    };
+    });
     let resolve_tree_conflicts = options.tree_conflicts;
 
     let mut ours = collect_changes(
@@ -209,7 +252,8 @@ where
                             }
                             editor.remove(to_components(theirs.location()))?;
                         }
-                        apply_change(&mut editor, theirs, rewritten_location.as_ref().map(|t| &t.0))?;
+                        apply_change(&mut editor, theirs, rewritten_location.as_ref().map(|t| &t.0))
+                            .or_raise(|| gix_error::message("Tree merge failed"))?;
                         their_changes[theirs_idx].mark_applied();
                     }
                     Some(candidate) => {
@@ -234,7 +278,8 @@ where
                             } else {
                                 // The passed node did not yield a directory rewrite for this path, so there is no
                                 // translated destination to retry. Apply the change at its original location.
-                                apply_change(&mut editor, theirs, None)?;
+                                apply_change(&mut editor, theirs, None)
+                                    .or_raise(|| gix_error::message("Tree merge failed"))?;
                                 their_changes[theirs_idx].mark_applied();
                             }
                             their_changes[theirs_idx].mark_processed();
@@ -311,7 +356,8 @@ where
                                         Original => ours,
                                         Swapped => theirs,
                                     };
-                                    apply_change(&mut editor, selected, None)?;
+                                    apply_change(&mut editor, selected, None)
+                                        .or_raise(|| gix_error::message("Tree merge failed"))?;
                                     match (outer_side, candidate_ours_idx) {
                                         (Original, Some(ours_idx)) => our_changes[ours_idx].mark_applied(),
                                         _ => their_changes[theirs_idx].mark_applied(),
@@ -2022,7 +2068,7 @@ where
     }
 
     Ok(Outcome {
-        tree: editor,
+        tree: editor.0,
         conflicts,
         failed_on_first_unresolved_conflict: failed_on_first_conflict,
     })
@@ -2032,8 +2078,8 @@ fn apply_change_and_mark(
     editor: &mut tree::Editor<'_>,
     change: &Change,
     disposition: &mut ChangeDisposition,
-) -> Result<(), tree::editor::Error> {
-    apply_change(editor, change, None)?;
+) -> Result<(), Error> {
+    apply_change(editor, change, None).or_raise(|| gix_error::message("Tree merge failed"))?;
     *disposition = ChangeDisposition::Applied;
     Ok(())
 }
@@ -2050,7 +2096,7 @@ fn apply_our_resolution(
         Original => (local_ours, local_ours_disposition),
         Swapped => (local_theirs, local_theirs_disposition),
     };
-    Ok(apply_change_and_mark(editor, ours, disposition)?)
+    apply_change_and_mark(editor, ours, disposition)
 }
 
 fn involves_submodule(a: &EntryMode, b: &EntryMode) -> bool {
